@@ -1,0 +1,13 @@
+Source: python-writev
+Section: python
+Priority: optional
+Maintainer: Ryan Smith-Roberts <rsr@ivi.tv>
+Build-Depends: debhelper (>= 5), python-dev, python-support (>=0.90)
+XS-Python-Version: all
+Standards-Version: 3.7.2
+
+Package: python-writev
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ${python:Depends}
+XB-Python-Version: ${python:Versions}
+Description: python interface to the writev(2) system call

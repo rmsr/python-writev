@@ -1,0 +1,54 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+versions := $(shell pyversions -vs)
+
+clean:
+	dh_testdir
+	dh_testroot
+	for version in $(versions); \
+		do python$$version setup.py clean; \
+	done
+	find . -name *\.py[co] -exec rm {} \;
+	rm -rf build
+	rm -f build-stamp
+	dh_clean 
+
+build: build-stamp
+build-stamp:
+	dh_testdir
+	for version in $(versions); \
+		do python$$version setup.py build; \
+	done
+	python setup.py build
+	touch build-stamp
+
+install: build
+	dh_testdir
+	dh_testroot
+	dh_clean -k 
+	for version in $(versions); \
+		do python$$version setup.py install --no-compile --root=debian/python-writev/; \
+	done
+
+binary-indep: build install
+# nothing to do
+
+binary-arch: build install
+	dh_testdir
+	dh_testroot
+	dh_installdocs
+	dh_compress
+	dh_fixperms
+	dh_pysupport -X/usr/share/python-writev
+	dh_installdeb
+	dh_shlibdeps
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
+
+binary: binary-indep binary-arch
+.PHONY: build clean binary-indep binary-arch binary install configure
