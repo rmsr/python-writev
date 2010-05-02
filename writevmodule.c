@@ -36,19 +36,19 @@ Write a sequence of strings to a file descriptor.");
 static PyObject *
 writev_writev(PyObject *self, PyObject *args)
 {
-    PyObject *fdobj, *list, *iter, *str;
-    Py_ssize_t size;
+    PyObject *fdobj, *seq, *iter, *str;
+    Py_ssize_t written;
     int fd, i, elements = 0;
     struct iovec iov[IOV_MAX];
     PyObject *strings[IOV_MAX];
 
-    if (!PyArg_ParseTuple(args, "OO:writev", &fdobj, &list))
+    if (!PyArg_ParseTuple(args, "OO:writev", &fdobj, &seq))
         return NULL;
 
     if ((fd = PyObject_AsFileDescriptor(fdobj)) == -1)
         return NULL;
 
-    iter = PyObject_GetIter(list);
+    iter = PyObject_GetIter(seq);
     if (iter == NULL)
         return NULL;
 
@@ -60,7 +60,7 @@ writev_writev(PyObject *self, PyObject *args)
             PyErr_SetString(PyExc_ValueError,
                     "writev() cannot write more than IOV_MAX strings");
             Py_DECREF(iter);
-            for (i=0; i==elements; i++)
+            for (i=0; i<elements; i++)
                 Py_DECREF(strings[i]);
             Py_DECREF(str);
             return NULL;
@@ -68,7 +68,7 @@ writev_writev(PyObject *self, PyObject *args)
 
         if (PyString_AsStringAndSize(str, &base, &len) == -1) {
             Py_DECREF(iter);
-            for (i=0; i==elements; i++)
+            for (i=0; i<elements; i++)
                 Py_DECREF(strings[i]);
             Py_DECREF(str);
             return NULL;
@@ -82,23 +82,128 @@ writev_writev(PyObject *self, PyObject *args)
 
     Py_DECREF(iter);
 
-    if (PyErr_Occurred())
-        return NULL;
-
     Py_BEGIN_ALLOW_THREADS
-    size = writev(fd, iov, elements);
+    written = writev(fd, iov, elements);
     Py_END_ALLOW_THREADS
 
-    for (i=0; i==elements; i++)
+    for (i=0; i<elements; i++)
         Py_DECREF(strings[i]);
 
-    if (size < 0)
+    if (written < 0)
         return PyErr_SetFromErrno(PyExc_OSError);
-    return PyInt_FromSsize_t(size);
+    return PyInt_FromSsize_t(written);
+}
+
+PyDoc_STRVAR(writev_lwritev__doc__,
+"lwritev(fd, seq) -> (byteswritten, remaining)\n\n\
+Write a sequence of strings to a file descriptor.\n\n\
+Returns a tuple containing the bytes successfully written and a list \
+composed of the strings or parts of strings that were not written.");
+
+static PyObject *
+writev_lwritev(PyObject *self, PyObject *args)
+{
+    PyObject *fdobj, *seq, *str, *new, *iter = NULL, *list = NULL;
+    Py_ssize_t written, len, remaining;
+    int fd, i, err, elements = 0, offset = 0, appending = 0;
+    struct iovec iov[IOV_MAX];
+    PyObject *strings[IOV_MAX];
+    char *base;
+
+    if (!PyArg_ParseTuple(args, "OO:lwritev", &fdobj, &seq))
+        return NULL;
+
+    if ((fd = PyObject_AsFileDescriptor(fdobj)) == -1)
+        return NULL;
+
+    if ((list = PyList_New(0)) == NULL)
+        return NULL;
+
+    if ((iter = PyObject_GetIter(seq)) == NULL)
+        goto error;
+
+    while ((str = PyIter_Next(iter)) != NULL) {
+        if (elements == IOV_MAX) {
+            PyErr_SetString(PyExc_ValueError,
+                    "lwritev() cannot write more than IOV_MAX strings");
+            Py_DECREF(str);
+            goto error;
+        }
+
+        if (PyString_AsStringAndSize(str, &base, &len) == -1) {
+            Py_DECREF(str);
+            goto error;
+        }
+
+        iov[elements].iov_base = base;
+        iov[elements].iov_len = len;
+        strings[elements] = str;
+        elements++;
+    }
+
+    Py_DECREF(iter);
+    iter = NULL;
+
+    Py_BEGIN_ALLOW_THREADS
+    written = writev(fd, iov, elements);
+    Py_END_ALLOW_THREADS
+
+    if (written < 0) {
+        PyErr_SetFromErrno(PyExc_OSError);
+        goto error;
+    }
+
+    remaining = written;
+    for (i=0; i<elements; i++) {
+        offset++;
+        str = strings[i];
+        if (appending) {
+            err = PyList_Append(list, str);
+            Py_DECREF(str);
+            if (err != 0)
+                goto error;
+            continue;
+        } 
+        remaining -= PyString_GET_SIZE(str);
+        if (remaining < 0) {
+            appending = 1;
+            if (PyString_AsStringAndSize(str, &base, &len) == -1) {
+                Py_DECREF(str);
+                goto error;
+            }
+            new = PyString_FromStringAndSize(base + len + remaining,
+                    -remaining);
+            Py_DECREF(str);
+            if (new == NULL)
+                goto error;
+            err = PyList_Append(list, new);
+            Py_DECREF(new);
+            if (err != 0)
+                goto error;
+            continue;
+        }
+        Py_DECREF(str);
+    }
+
+    return Py_BuildValue("nN", written, list);
+
+error:
+    if (iter) {
+        Py_DECREF(iter);
+    }
+    if (list) {
+        Py_DECREF(list);
+    }
+    if (elements) {
+        for (i=offset; i<elements; i++)
+            Py_DECREF(strings[i]);
+    }
+    return NULL;
 }
 
 static PyMethodDef writev_methods[] = {
     {"writev",  writev_writev,  METH_VARARGS,   writev_writev__doc__},
+    {"lwritev", writev_lwritev, METH_VARARGS,   writev_lwritev__doc__},
     {NULL,      NULL,           0,              NULL},  /* sentinel */
 };
 

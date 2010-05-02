@@ -1,3 +1,10 @@
+python-writev (1.1) ivi; urgency=low
+
+  * Add lwritev. 
+  * Fix broken for-loops.
+
+ -- Ryan Smith-Roberts <rsr@ivi.tv>  Sun, 02 May 2010 10:57:02 -0700
+
 python-writev (1.0) ivi; urgency=low
 
   * Initial release.
