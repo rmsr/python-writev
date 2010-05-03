@@ -1,4 +1,4 @@
-/* writev - Module containing unix writev(2) call.*/
+/* writev - Python extension module for writev(2) unix system call.*/
 /*
 Copyright (c) 2010, ivi, Inc.
 All rights reserved.
@@ -188,12 +188,8 @@ writev_lwritev(PyObject *self, PyObject *args)
     return Py_BuildValue("nN", written, list);
 
 error:
-    if (iter) {
-        Py_DECREF(iter);
-    }
-    if (list) {
-        Py_DECREF(list);
-    }
+    Py_XDECREF(iter);
+    Py_XDECREF(list);
     if (elements) {
         for (i=offset; i<elements; i++)
             Py_DECREF(strings[i]);
